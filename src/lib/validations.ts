@@ -43,6 +43,8 @@ export const driverCreateSchema = z.object({
   kurlyAccountName: z.string().trim().max(50).optional().nullable(),
   accountType: z.enum(["regular", "spare"]).optional().default("regular"),
   defaultTimeSlot: z.enum(["first", "second"]).optional().nullable(),
+  coverageArea: z.enum(["daegu", "gumi", "ulsan", "busan"]).optional().nullable(),
+  employmentType: z.enum(["jiip", "hwaseong"]).optional().nullable(),
   maxCapacity: z.number().int().min(0).optional().nullable(),
   capabilityNote: z.string().trim().max(500).optional().nullable(),
   isActive: z.boolean().optional().default(true),
@@ -87,3 +89,28 @@ export const adminUserUpdateSchema = z.object({
   role: z.enum(["super_admin", "center_manager"]).optional(),
   centerId: z.number().int().positive().optional().nullable(),
 });
+
+export const weeklyLeavesBulkSchema = z.object({
+  centerId: z.number().int().positive(),
+  timeSlot: z.enum(["first", "second"]),
+  leaves: z.array(
+    z.object({
+      driverId: z.number().int().positive(),
+      weekday: z.number().int().min(0).max(6),
+      note: z.string().trim().max(50).optional().nullable(),
+    }),
+  ),
+});
+
+export const leaveExceptionCreateSchema = z.object({
+  centerId: z.number().int().positive(),
+  driverId: z.number().int().positive(),
+  timeSlot: z.enum(["first", "second"]),
+  leaveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD 형식"),
+  kind: z.enum(["leave", "work"]).optional().default("leave"),
+  note: z.string().trim().max(200).optional().nullable(),
+});
+
+export const leaveExceptionUpdateSchema = leaveExceptionCreateSchema
+  .omit({ centerId: true, driverId: true, timeSlot: true, leaveDate: true })
+  .partial();

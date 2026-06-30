@@ -39,11 +39,17 @@ export function SplitEditorLayout({
 export function ListPanel({
   title,
   hint,
+  searchValue,
+  onSearchChange,
+  searchPlaceholder = "이름, ID, 구역번호…",
   children,
   className,
 }: {
   title: string;
   hint?: string;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  searchPlaceholder?: string;
   children: ReactNode;
   className?: string;
 }) {
@@ -52,6 +58,15 @@ export function ListPanel({
       <div className="mb-3 shrink-0">
         <h3 className="font-semibold">{title}</h3>
         {hint ? <p className="mt-0.5 text-xs text-muted">{hint}</p> : null}
+        {onSearchChange ? (
+          <input
+            type="search"
+            value={searchValue ?? ""}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder={searchPlaceholder}
+            className="mt-2 w-full rounded-lg border border-card-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-accent"
+          />
+        ) : null}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto">{children}</div>
     </div>

@@ -36,6 +36,7 @@ function ZoneManagerInner({
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [listSearch, setListSearch] = useState("");
 
   async function loadZones() {
     if (!centerId) return;
@@ -54,6 +55,10 @@ function ZoneManagerInner({
 
   useEffect(() => {
     loadZones();
+  }, [centerId]);
+
+  useEffect(() => {
+    setListSearch("");
   }, [centerId]);
 
   function resetForm() {
@@ -117,6 +122,12 @@ function ZoneManagerInner({
     await loadZones();
   }
 
+  const searchQuery = listSearch.trim().toLowerCase();
+  const filteredZones = zones.filter((zone) => {
+    if (!searchQuery) return true;
+    return [zone.code, zone.name].filter(Boolean).some((s) => s!.toLowerCase().includes(searchQuery));
+  });
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <CenterPicker centers={centers} lockedCenterId={lockedCenterId} />
@@ -125,7 +136,16 @@ function ZoneManagerInner({
         formWidth="w-[320px]"
         form={
           <section className="flex h-full flex-col p-4">
-            <h3 className="font-semibold">{editingId ? "구역 수정" : "구역 등록"}</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-semibold">{editingId ? "구역 수정" : "구역 등록"}</h3>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="shrink-0 rounded-lg border border-accent/50 px-2 py-0.5 text-xs text-accent hover:bg-accent/10"
+              >
+                + 신규 등록
+              </button>
+            </div>
             <p className="mt-0.5 text-xs text-muted">
               {center?.name} · 20-1 또는 20-1가처럼 한 줄로 입력
             </p>
@@ -170,25 +190,28 @@ function ZoneManagerInner({
                 >
                   {saving ? "저장 중..." : editingId ? "저장" : "등록"}
                 </button>
-                {editingId ? (
-                  <button
-                    type="button"
-                    onClick={resetForm}
-                    className="rounded-lg border px-3 py-1.5 text-sm"
-                  >
-                    취소
-                  </button>
-                ) : null}
               </div>
             </form>
           </section>
         }
         list={
-          <ListPanel title="구역 목록" hint={`총 ${zones.length}개 · 목록 클릭 → 수정`}>
+          <ListPanel
+            title="구역 목록"
+            hint={
+              searchQuery
+                ? `${filteredZones.length} / ${zones.length}개 · 목록 클릭 → 수정`
+                : `총 ${zones.length}개 · 목록 클릭 → 수정`
+            }
+            searchValue={listSearch}
+            onSearchChange={setListSearch}
+            searchPlaceholder="구역번호, 이름…"
+          >
             {loading ? (
               <p className="text-sm text-muted">불러오는 중...</p>
             ) : zones.length === 0 ? (
               <p className="text-sm text-muted">등록된 구역이 없습니다.</p>
+            ) : filteredZones.length === 0 ? (
+              <p className="text-sm text-muted">검색 결과가 없습니다.</p>
             ) : (
               <table className="min-w-full text-sm">
                 <thead>
@@ -200,7 +223,7 @@ function ZoneManagerInner({
                   </tr>
                 </thead>
                 <tbody>
-                  {zones.map((zone) => (
+                  {filteredZones.map((zone) => (
                     <tr
                       key={zone.id}
                       onClick={() => startEdit(zone)}

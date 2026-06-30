@@ -7,8 +7,9 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-utils";
 import { getAuthUser } from "@/lib/center-access";
+import { isCoverageAreaValidForCenter } from "@/lib/driver-groups";
 import { db, ensureDbReady } from "@/lib/db";
-import { drivers } from "@/lib/db/schema";
+import { centers, drivers } from "@/lib/db/schema";
 import { driverUpdateSchema } from "@/lib/validations";
 
 type Params = { params: Promise<{ id: string }> };
@@ -49,10 +50,27 @@ export async function PUT(request: Request, { params }: Params) {
       return badRequestResponse("일반 기사는 1차/2차를 선택하세요.");
     }
 
+    const targetCenterId = data.centerId ?? existing.centerId;
+    const [center] = await db
+      .select()
+      .from(centers)
+      .where(eq(centers.id, targetCenterId))
+      .limit(1);
+    if (!center) return badRequestResponse("센터를 찾을 수 없습니다.");
+
+    const coverageArea =
+      data.coverageArea !== undefined ? data.coverageArea : existing.coverageArea;
+    if (coverageArea && !isCoverageAreaValidForCenter(center.name, coverageArea)) {
+      return badRequestResponse("이 센터에서 사용할 수 없는 권역입니다.");
+    }
+
+    const employmentType =
+      data.employmentType !== undefined ? data.employmentType : existing.employmentType;
+
     const [updated] = await db
       .update(drivers)
       .set({
-        centerId: data.centerId ?? existing.centerId,
+        centerId: targetCenterId,
         name: data.name ?? existing.name,
         kurlyId: data.kurlyId !== undefined ? data.kurlyId?.trim() || null : existing.kurlyId,
         kurlyAccountName:
@@ -61,6 +79,8 @@ export async function PUT(request: Request, { params }: Params) {
             : existing.kurlyAccountName,
         accountType,
         defaultTimeSlot: accountType === "spare" ? defaultTimeSlot : defaultTimeSlot ?? "first",
+        coverageArea: coverageArea ?? null,
+        employmentType: employmentType ?? null,
         maxCapacity: data.maxCapacity !== undefined ? data.maxCapacity : existing.maxCapacity,
         capabilityNote:
           data.capabilityNote !== undefined ? data.capabilityNote : existing.capabilityNote,

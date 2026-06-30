@@ -5,13 +5,20 @@ import { CenterPicker, useSelectedCenterId } from "@/components/center-picker";
 import { ListPanel, SplitEditorLayout, stickyTableHeadClass } from "@/components/split-editor-layout";
 import type {
   Center,
+  CoverageArea,
   Driver,
   DriverIdBorrowRule,
+  EmploymentType,
   RandomPoolMember,
   TimeSlot,
   Zone,
   ZoneMapping,
 } from "@/lib/db/schema";
+import {
+  coverageAreasForCenter,
+  EMPLOYMENT_OPTIONS,
+  formatDriverGroupLabel,
+} from "@/lib/driver-groups";
 import { cn } from "@/lib/utils";
 
 const TIME_LABEL: Record<TimeSlot, string> = { first: "1차", second: "2차" };
@@ -69,6 +76,8 @@ function DriverManagerInner({
   lockedCenterId?: number | null;
 }) {
   const centerId = useSelectedCenterId(centers, lockedCenterId);
+  const center = centers.find((c) => c.id === centerId);
+  const coverageOptions = coverageAreasForCenter(center?.name);
   const [tab, setTab] = useState<"drivers" | "borrow">("drivers");
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [zones, setZones] = useState<Zone[]>([]);
@@ -83,11 +92,14 @@ function DriverManagerInner({
     kurlyId: "",
     accountType: "regular" as "regular" | "spare",
     defaultTimeSlot: "first" as TimeSlot,
+    coverageArea: "" as CoverageArea | "",
+    employmentType: "" as EmploymentType | "",
     maxCapacity: "",
     isActive: true,
   });
   const [assignment, setAssignment] = useState<AssignmentForm>(emptyAssignment);
   const [ruleForm, setRuleForm] = useState({ actualDriverId: "", kurlyDriverId: "" });
+  const [listSearch, setListSearch] = useState("");
 
   const zoneMap = new Map(zones.map((z) => [z.id, z.code]));
 
@@ -111,6 +123,10 @@ function DriverManagerInner({
     loadAll();
   }, [centerId]);
 
+  useEffect(() => {
+    setListSearch("");
+  }, [centerId]);
+
   function driverName(id: number) {
     return drivers.find((d) => d.id === id)?.name ?? `#${id}`;
   }
@@ -132,6 +148,8 @@ function DriverManagerInner({
       kurlyId: "",
       accountType: "regular",
       defaultTimeSlot: "first",
+      coverageArea: "",
+      employmentType: "",
       maxCapacity: "",
       isActive: true,
     });
@@ -146,6 +164,8 @@ function DriverManagerInner({
       kurlyId: driver.kurlyId ?? "",
       accountType: driver.accountType,
       defaultTimeSlot: driver.defaultTimeSlot ?? "first",
+      coverageArea: driver.coverageArea ?? "",
+      employmentType: driver.employmentType ?? "",
       maxCapacity: driver.maxCapacity ? String(driver.maxCapacity) : "",
       isActive: driver.isActive,
     });
@@ -199,6 +219,8 @@ function DriverManagerInner({
       kurlyId: form.kurlyId.trim() || null,
       accountType: form.accountType,
       defaultTimeSlot: form.accountType === "spare" ? null : form.defaultTimeSlot,
+      coverageArea: form.coverageArea || null,
+      employmentType: form.employmentType || null,
       maxCapacity: form.maxCapacity ? Number(form.maxCapacity) : null,
       isActive: form.isActive,
     };
@@ -249,6 +271,19 @@ function DriverManagerInner({
     await loadAll();
   }
 
+  const searchQuery = listSearch.trim().toLowerCase();
+  const filteredDrivers = drivers.filter((d) => {
+    if (!searchQuery) return true;
+    const zoneLabel = formatZoneLabel(d, mappings, pool, zoneMap);
+    const kurlyLabel = defaultKurlyLabel(d);
+    const timeLabel =
+      d.accountType === "spare" || !d.defaultTimeSlot ? "" : TIME_LABEL[d.defaultTimeSlot];
+    const groupLabel = formatDriverGroupLabel(d, center?.name);
+    return [d.name, d.kurlyId, kurlyLabel, zoneLabel, timeLabel, groupLabel, d.accountType === "spare" ? "예비" : ""]
+      .filter(Boolean)
+      .some((s) => s!.toLowerCase().includes(searchQuery));
+  });
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <CenterPicker centers={centers} lockedCenterId={lockedCenterId} />
@@ -275,7 +310,16 @@ function DriverManagerInner({
         <SplitEditorLayout
           form={
             <form onSubmit={saveDriver} className="flex h-full min-h-0 flex-col gap-2 p-4">
-              <h3 className="shrink-0 font-semibold">{editingId ? "기사 수정" : "기사 등록"}</h3>
+              <div className="flex shrink-0 items-center justify-between gap-2">
+                <h3 className="font-semibold">{editingId ? "기사 수정" : "기사 등록"}</h3>
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="shrink-0 rounded-lg border border-accent/50 px-2 py-0.5 text-xs text-accent hover:bg-accent/10"
+                >
+                  + 신규 등록
+                </button>
+              </div>
 
               <div className="grid shrink-0 grid-cols-2 gap-2">
                 <input
@@ -312,6 +356,42 @@ function DriverManagerInner({
                   onChange={(e) => setForm((p) => ({ ...p, kurlyId: e.target.value }))}
                   className={cn(fieldClass, "col-span-2")}
                 />
+                {coverageOptions ? (
+                  <select
+                    value={form.coverageArea}
+                    onChange={(e) =>
+                      setForm((p) => ({
+                        ...p,
+                        coverageArea: e.target.value as CoverageArea | "",
+                      }))
+                    }
+                    className={fieldClass}
+                  >
+                    <option value="">권역 (선택)</option>
+                    {coverageOptions.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
+                <select
+                  value={form.employmentType}
+                  onChange={(e) =>
+                    setForm((p) => ({
+                      ...p,
+                      employmentType: e.target.value as EmploymentType | "",
+                    }))
+                  }
+                  className={cn(fieldClass, !coverageOptions && "col-span-2")}
+                >
+                  <option value="">고용형 (선택)</option>
+                  {EMPLOYMENT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {form.accountType === "regular" && (
@@ -377,25 +457,32 @@ function DriverManagerInner({
                   >
                     {saving ? "저장 중..." : "저장"}
                   </button>
-                  {editingId ? (
-                    <button
-                      type="button"
-                      onClick={resetForm}
-                      className="rounded-lg border px-3 py-1.5 text-sm"
-                    >
-                      취소
-                    </button>
-                  ) : null}
                 </div>
               </div>
             </form>
           }
           list={
-            <ListPanel title="기사 목록" hint="목록 클릭 → 수정 · 삭제만 버튼">
+            <ListPanel
+              title="기사 목록"
+              hint={
+                searchQuery
+                  ? `${filteredDrivers.length} / ${drivers.length}명 · 목록 클릭 → 수정`
+                  : `총 ${drivers.length}명 · 목록 클릭 → 수정 · 삭제만 버튼`
+              }
+              searchValue={listSearch}
+              onSearchChange={setListSearch}
+              searchPlaceholder="이름, 컬리 ID, 구역…"
+            >
+              {filteredDrivers.length === 0 ? (
+                <p className="py-4 text-sm text-muted">
+                  {searchQuery ? "검색 결과가 없습니다." : "등록된 기사가 없습니다."}
+                </p>
+              ) : (
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className={cn("border-b text-left text-muted", stickyTableHeadClass())}>
                     <th className="py-1.5 pr-3">이름</th>
+                    <th className="py-1.5 pr-3">그룹</th>
                     <th className="py-1.5 pr-3">타임</th>
                     <th className="py-1.5 pr-3">컬리 ID</th>
                     <th className="py-1.5 pr-3">구역</th>
@@ -403,7 +490,7 @@ function DriverManagerInner({
                   </tr>
                 </thead>
                 <tbody>
-                  {drivers.map((d) => (
+                  {filteredDrivers.map((d) => (
                     <tr
                       key={d.id}
                       onClick={() => startEdit(d)}
@@ -417,6 +504,9 @@ function DriverManagerInner({
                         {d.accountType === "spare" ? (
                           <span className="ml-1 text-xs text-muted">(예비)</span>
                         ) : null}
+                      </td>
+                      <td className="py-1.5 pr-3 text-xs text-muted">
+                        {formatDriverGroupLabel(d, center?.name)}
                       </td>
                       <td className="py-1.5 pr-3">
                         {d.accountType === "spare" || !d.defaultTimeSlot
@@ -441,6 +531,7 @@ function DriverManagerInner({
                   ))}
                 </tbody>
               </table>
+              )}
             </ListPanel>
           }
         />

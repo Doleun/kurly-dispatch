@@ -4,6 +4,7 @@ import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import * as schema from "./schema";
 import { runV1bMigrations } from "./migrate-v1b";
+import { runV1cMigrations } from "./migrate-v1c";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "kurly.db");
@@ -84,6 +85,7 @@ async function runMigrations() {
     await client.execute(statement);
   }
   await runV1bMigrations(client);
+  await runV1cMigrations(client);
 }
 
 const readyPromise = global.__kurlyDbReady ?? runMigrations();

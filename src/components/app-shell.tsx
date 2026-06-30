@@ -9,7 +9,8 @@ const navItems = [
   { href: "/centers", label: "센터 · 관리자" },
   { href: "/zones", label: "구역 관리" },
   { href: "/drivers", label: "기사 관리" },
-  { href: "/attendance", label: "출근 현황", disabled: true },
+  { href: "/schedule", label: "휴무표" },
+  { href: "/attendance", label: "출근 현황" },
   { href: "/dispatch", label: "배차 관리", disabled: true },
 ];
 

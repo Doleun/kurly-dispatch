@@ -5,8 +5,8 @@
 | Phase | 항목 | 상태 |
 |-------|------|------|
 | 1a | 로그인, 구역 CRUD, 대시보드 | ✅ |
-| 1b | 센터·관리자, role/center JWT, 기사 CRUD, 구역 매핑·랜덤 통합 UI, borrow rules, SplitEditorLayout | ✅ |
-| 1c | 휴무·출근 | — |
+| 1b | 센터·관리자, role/center JWT, 기사 CRUD, 구역 매핑·랜덤 통합 UI, borrow rules, SplitEditorLayout, **기사 권역·고용형** | ✅ |
+| 1c | 휴무·출근 | ✅ |
 | 1d | 배차 draft, 구역→ID, ID 일일 분할 | — |
 | 2 | 정산 | — |
 
@@ -68,6 +68,8 @@
 | kurly_account_name | TEXT NULL | 컬리 계정에 표시되는 이름 |
 | account_type | TEXT | `regular` \| `spare` — **spare=예비 ID** (고정 구역 없음, 비상 투입) |
 | default_time_slot | first \| second | 기본 타임 (spare는 null 가능) |
+| coverage_area | TEXT NULL | **권역** — `daegu`/`gumi` (대구 센터), `ulsan`/`busan` (울산 센터). 휴무표 그룹용 |
+| employment_type | TEXT NULL | **고용형** — `jiip`(지입) \| `hwaseong`(화성/알바). 휴무표 그룹용 |
 | max_capacity | INTEGER | 최대 처리량 |
 | capability_note | TEXT | 역량/특이사항 |
 | is_active | BOOLEAN | |

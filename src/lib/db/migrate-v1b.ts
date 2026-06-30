@@ -262,23 +262,109 @@ async function createCentersTables(client: Client) {
   `);
 }
 
+async function childTablesNeedFkRepair(client: Client): Promise<boolean> {
+  if (!(await tableExists(client, "zone_mappings"))) return false;
+
+  const zoneFk = await client.execute("PRAGMA foreign_key_list(zone_mappings)");
+  const brokenZone = zoneFk.rows.some((r) => String(r.table).includes("legacy"));
+  if (brokenZone) return true;
+
+  if (!(await tableExists(client, "random_pool_members"))) return false;
+  const poolFk = await client.execute("PRAGMA foreign_key_list(random_pool_members)");
+  return poolFk.rows.some((r) => String(r.table).includes("legacy"));
+}
+
+/** zone_mappings / random_pool_members FK가 drivers_legacy 등을 가리키는 경우 재생성 */
+async function repairChildTableForeignKeys(client: Client) {
+  if (!(await childTablesNeedFkRepair(client))) return;
+
+  await client.execute("PRAGMA foreign_keys = OFF");
+
+  if (await tableExists(client, "zone_mappings")) {
+    await client.execute(`
+      CREATE TABLE zone_mappings_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+        zone_id INTEGER NOT NULL REFERENCES zones(id) ON DELETE CASCADE,
+        time_slot TEXT NOT NULL CHECK (time_slot IN ('first', 'second')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(driver_id, zone_id, time_slot)
+      )
+    `);
+    await client.execute(`
+      INSERT INTO zone_mappings_new (id, driver_id, zone_id, time_slot, created_at)
+      SELECT zm.id, zm.driver_id, zm.zone_id, zm.time_slot, zm.created_at
+      FROM zone_mappings zm
+      INNER JOIN drivers d ON d.id = zm.driver_id
+      INNER JOIN zones z ON z.id = zm.zone_id
+    `);
+    await client.execute("DROP TABLE zone_mappings");
+    await client.execute("ALTER TABLE zone_mappings_new RENAME TO zone_mappings");
+  }
+
+  if (await tableExists(client, "random_pool_members")) {
+    await client.execute(`
+      CREATE TABLE random_pool_members_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        driver_id INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+        time_slot TEXT NOT NULL CHECK (time_slot IN ('first', 'second')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(driver_id, time_slot)
+      )
+    `);
+    await client.execute(`
+      INSERT INTO random_pool_members_new (id, driver_id, time_slot, created_at)
+      SELECT rp.id, rp.driver_id, rp.time_slot, rp.created_at
+      FROM random_pool_members rp
+      INNER JOIN drivers d ON d.id = rp.driver_id
+    `);
+    await client.execute("DROP TABLE random_pool_members");
+    await client.execute("ALTER TABLE random_pool_members_new RENAME TO random_pool_members");
+  }
+
+  await client.execute("PRAGMA foreign_keys = ON");
+}
+
+async function migrateDriverGroupFields(client: Client) {
+  if (!(await tableExists(client, "drivers"))) return;
+
+  if (!(await columnExists(client, "drivers", "coverage_area"))) {
+    await client.execute("ALTER TABLE drivers ADD COLUMN coverage_area TEXT");
+  }
+  if (!(await columnExists(client, "drivers", "employment_type"))) {
+    await client.execute("ALTER TABLE drivers ADD COLUMN employment_type TEXT");
+  }
+}
+
 export async function runV1bMigrations(client: Client) {
   await client.execute("PRAGMA busy_timeout = 10000");
 
-  const version = await getSchemaVersion(client);
-  if (version >= 2) return;
+  let version = await getSchemaVersion(client);
 
-  await createCentersTables(client);
-  const { daeguId } = await seedDefaultCenters(client);
-  await migrateUsers(client);
-  await migrateZones(client, daeguId);
-  await migrateDrivers(client, daeguId);
-  await createBorrowRulesTable(client);
-  await client.execute(`
-    CREATE UNIQUE INDEX IF NOT EXISTS drivers_center_kurly_id
-    ON drivers (center_id, kurly_id)
-    WHERE kurly_id IS NOT NULL AND kurly_id != ''
-  `);
+  if (version < 2) {
+    await createCentersTables(client);
+    const { daeguId } = await seedDefaultCenters(client);
+    await migrateUsers(client);
+    await migrateZones(client, daeguId);
+    await migrateDrivers(client, daeguId);
+    await createBorrowRulesTable(client);
+    await client.execute(`
+      CREATE UNIQUE INDEX IF NOT EXISTS drivers_center_kurly_id
+      ON drivers (center_id, kurly_id)
+      WHERE kurly_id IS NOT NULL AND kurly_id != ''
+    `);
+    await setSchemaVersion(client, 2);
+    version = 2;
+  }
 
-  await setSchemaVersion(client, 2);
+  if (version < 3) {
+    await repairChildTableForeignKeys(client);
+    await setSchemaVersion(client, 3);
+    version = 3;
+  }
+
+  if (version < 4) {
+    await migrateDriverGroupFields(client);
+    await setSchemaVersion(client, 4);
+  }
 }

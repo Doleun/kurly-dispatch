@@ -8,8 +8,9 @@ import {
   unauthorizedResponse,
 } from "@/lib/api-utils";
 import { getAuthUser, resolveCenterId } from "@/lib/center-access";
+import { isCoverageAreaValidForCenter } from "@/lib/driver-groups";
 import { db, ensureDbReady } from "@/lib/db";
-import { drivers } from "@/lib/db/schema";
+import { centers, drivers } from "@/lib/db/schema";
 import { driverCreateSchema } from "@/lib/validations";
 
 export async function GET(request: Request) {
@@ -62,6 +63,19 @@ export async function POST(request: Request) {
       return badRequestResponse("일반 기사는 1차/2차를 선택하세요.");
     }
 
+    const [center] = await db
+      .select()
+      .from(centers)
+      .where(eq(centers.id, data.centerId))
+      .limit(1);
+    if (!center) return badRequestResponse("센터를 찾을 수 없습니다.");
+    if (
+      data.coverageArea &&
+      !isCoverageAreaValidForCenter(center.name, data.coverageArea)
+    ) {
+      return badRequestResponse("이 센터에서 사용할 수 없는 권역입니다.");
+    }
+
     const [created] = await db
       .insert(drivers)
       .values({
@@ -74,6 +88,8 @@ export async function POST(request: Request) {
           data.accountType === "spare"
             ? data.defaultTimeSlot ?? null
             : (data.defaultTimeSlot ?? "first"),
+        coverageArea: data.coverageArea ?? null,
+        employmentType: data.employmentType ?? null,
         maxCapacity: data.maxCapacity ?? null,
         capabilityNote: data.capabilityNote ?? null,
         isActive: data.isActive ?? true,

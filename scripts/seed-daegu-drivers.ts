@@ -1,0 +1,151 @@
+import "./load-env";
+import { eq } from "drizzle-orm";
+import { db, ensureDbReady } from "../src/lib/db";
+import { centers, drivers } from "../src/lib/db/schema";
+
+/** kurly_id TAB kurly_display_name (DW 접두사 제거 → 실명) */
+const RAW = `
+300PTH1000	DW김민재
+300PTH1001	DW권수현
+300PTH1002	DW조선화
+300PTH1003	DW김태영
+300PTH1004	DW김동규
+300PTH1005	DW김민
+300PTH1006	DW김도엽
+300PTH1007	DW강현준
+300PTH1008	DW박준범
+300PTH1009	DW강경석
+300PTH1010	DW김동관
+300PTH1011	DW백민우
+300PTH1012	DW김현영
+300PTH1013	DW정창기
+300PTH1014	DW정성훈
+300PTH1015	DW박성규
+300PTH1016	DW김성연
+300PTH1017	DW김남우
+300PTH1018	DW김세룡
+300PTH1019	DW최알렉산더
+300PTH1020	DW이지은
+300PTH1021	DW김명
+300PTH1022	DW윤종봉
+300PTH1023	DW김광용
+300PTH1024	DW전창현
+300PTH1025	DW추현수
+300PTH1026	DW이동걸
+300PTH1027	DW최아영
+300PTH1028	DW정연제
+300PTH1029	DW박주태
+300PTH1030	DW이대주
+300PTH1031	DW박훈재
+300PTH1032	DW배병현
+300PTH1033	DW서덕원
+300PTH1034	DW박명화
+300PTH1035	DW김명철
+300PTH1036	DW이종민
+300PTH1037	DW김종식
+300PTH1038	DW변수환
+300PTH1039	DW양도원
+300PTH1040	DW기세웅
+300PTH1041	DW김상인
+300PTH1043	DW심은섭
+300PTH1044	DW천유영
+300PTH1045	DW정재훈
+300PTH1046	DW이종건
+300PTH1047	DW이한영
+300PTH1048	DW김단비
+300PTH1049	DW최윤규
+300PTH1050	DW박현준
+300PTH1051	DW신상훈
+300PTH1052	DW안중경
+300PTH1053	DW신현선
+300PTH1054	DW조민호
+300PTH1055	DW김상현
+300PTH1056	DW전대우
+300PTH1057	DW정병국
+300PTH1058	DW김수진
+300PTH1059	DW나현석
+300PTH1060	DW권은영
+300PTH1061	DW장문석
+300PTH1062	DW조성광
+300PTH1063	DW박경수
+300PTH1064	DW서동윤
+300PTH1065	DW지홍구
+300PTH1066	DW김도헌
+300PTH1067	DW이호림
+300PTH1068	DW윤지연
+300PTH1069	DW김종훈
+300PTH1070	DW성태경
+300PTH1071	DW박태현
+300PTH1072	DW김보석
+300PTH1073	DW강병수
+300PTH1074	DW최무성
+300PTH1075	DW이청아
+300PTH1076	DW이승현
+300PTH1077	DW김대근
+300PTH1078	DW윤은수
+300PTH1079	DW김기범
+300PTH1080	DW민경남
+300PTH1081	DW신동관
+300PTH1082	DW안진형
+300PTH1083	DW나기철
+300PTH1084	DW최옥희
+300PTH1085	DW김대원
+300PTH1086	DW박종옥
+300PTH1089	DW이종홍
+300PTH1090	DW김연수
+300PTH1091	DW전대덕
+300PTH1092	DW최한석
+300PTH1093	DW이혜민
+`.trim();
+
+function parseName(raw: string): string {
+  return raw.trim().replace(/^DW/i, "");
+}
+
+async function seed() {
+  await ensureDbReady();
+
+  const [daegu] = await db.select().from(centers).where(eq(centers.name, "대구")).limit(1);
+  if (!daegu) {
+    console.error('센터 "대구"를 찾을 수 없습니다. npm run dev 로 DB 마이그레이션 후 다시 실행하세요.');
+    process.exit(1);
+  }
+
+  const existing = await db.select().from(drivers).where(eq(drivers.centerId, daegu.id));
+  const existingIds = new Set(existing.map((d) => d.kurlyId).filter(Boolean));
+
+  let created = 0;
+  let skipped = 0;
+
+  for (const line of RAW.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const [kurlyId, displayRaw] = trimmed.split(/\t+/);
+    const name = parseName(displayRaw);
+    if (!kurlyId || !name) continue;
+
+    if (existingIds.has(kurlyId)) {
+      skipped++;
+      continue;
+    }
+
+    await db.insert(drivers).values({
+      centerId: daegu.id,
+      name,
+      kurlyId,
+      accountType: "regular",
+      defaultTimeSlot: "first",
+      isActive: true,
+      updatedAt: new Date().toISOString(),
+    });
+    existingIds.add(kurlyId);
+    created++;
+  }
+
+  console.log(`대구 기사 시드 완료: 추가 ${created}명, 건너뜀 ${skipped}명 (중복)`);
+}
+
+seed().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

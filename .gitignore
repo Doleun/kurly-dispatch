@@ -32,9 +32,11 @@ yarn-error.log*
 .env
 .env*.local
 
-# database
-/data/*.db
+# database — kurly.db는 Git에 포함 (PC 간 데이터 동기화)
+# 임시/잠금 파일만 제외
 /data/*.db-journal
+/data/*.db-wal
+/data/*.db-shm
 
 # typescript
 *.tsbuildinfo
